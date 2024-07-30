@@ -66,13 +66,26 @@ pthread_t* createThreads(int numberOfThreads){
     //      specified in the command line arguments.
 
     pthread_t* threadsArray = malloc(sizeof(pthread_t) * numberOfThreads);
+
+    // if malloc failed:
+    if (threadsArray == NULL) {
+        perror("Error: malloc for threadsArray failed\n");
+        exit(1);
+    }
+
     for(int i = 0; i < numberOfThreads; i++){
         // TODO: add function instead of FUNCTION
         int* threadID = malloc(sizeof(int));
+
+        // if malloc for threadID failed:
+        if (threadID == NULL) {
+            perror("Error: malloc for threadID failed\n");
+            exit(1);
+        }
+
         *threadID = i;
         pthread_create(&threadsArray[i], NULL, FUNCTION, (void*)threadID);
     }
-
 
     return threads;
 }
@@ -87,13 +100,9 @@ int main(int argc, char *argv[])
     getargs(&port, argc, argv, &numberOfThreads,
             &maxQueueSize, scheduleAlgorithm);
 
-    createThreads()
-    // 
-    // HW3: Create some threads...
-    //
-    // TODO: for loop that creates the threads.
+    pthread_t* threadPool = createThreads(numberOfThreads);
 
-
+    // TODO: block all threads in the thread pool.
 
     // TODO: Create three arrays that will act as counters:
     requestArray Dynamic;
@@ -110,7 +119,10 @@ int main(int argc, char *argv[])
 
     // TODO: Initialize all three arrays to 0.
 
+
     listenfd = Open_listenfd(port);
+
+
     while (1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
