@@ -4,14 +4,14 @@
 #include <pthread.h>
 
 #define NUMBER_OF_SERVER_ARGUMENTS 5
-
+#define ZERO 0
 
 void* threadRequestHandler(void* argument);
 
 void overloadHandler(int connfd, char* scheduleAlgorithm);
 
-// size of Queue_working
-int number_of_working_threads = 0;
+// size of Queue_working:
+int number_of_working_threads = ZERO;
 
 Queue waitingQueue = NULL;
 
@@ -61,7 +61,7 @@ void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
     *port = atoi(argv[1]);
     *numberOfThreads = atoi(argv[2]);
     *maxQueueSize = atoi(argv[3]);
-    *scheduleAlgorithm = argv[4];
+    scheduleAlgorithm = argv[4];
 }
 
 
@@ -87,7 +87,7 @@ pthread_t* createThreads(int numberOfThreads){
         *threadID = i;
         pthread_create(&threadsArray[i], NULL, threadRequestHandler, (void*)threadID);
     }
-    return threads;
+    return threadsArray;
 }
 
 int main(int argc, char *argv[])
@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
 
     while (1) {
         clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
+        connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*)&clientlen);
 
 
 
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         // do the work.
         //
 
-        requestHandle(connfd);
+        requestHandle(connfd, DynamicRequests, StaticRequests, OverallRequests);
 
         Close(connfd);
     }
