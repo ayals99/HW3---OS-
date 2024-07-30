@@ -34,6 +34,7 @@ The command line arguments to your web server are to be interpreted as follows:
 
 
 // HW3: Parse the new arguments too
+// TODO: add more parameters to the function
 void getargs(int *port, int argc, char *argv[])
 {
     if (argc < NUMBER_OF_SERVER_ARGUMENTS) {
@@ -41,7 +42,7 @@ void getargs(int *port, int argc, char *argv[])
         exit(1);
     }
     *port = atoi(argv[1]);
-
+ // TODO: add the other arguments to the function
 }
 
 
