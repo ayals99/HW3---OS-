@@ -13,7 +13,7 @@ void overloadHandler(int connfd, char* scheduleAlgorithm);
 // size of Queue_working
 int number_of_working_threads = 0;
 
-Queue waitingQueue;
+Queue waitingQueue = NULL;
 
 // TODO: Create three arrays that will act as counters:
 requestArray DynamicRequests;
@@ -49,13 +49,6 @@ The command line arguments to your web server are to be interpreted as follows:
         the scheduling algorithm to be performed. Must be one of "block", "dt",
         "dh", "bf" or "random".
 **/
-
-
-
-
-
-
-
 
 
 void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
