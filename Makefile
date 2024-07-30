@@ -2,7 +2,7 @@
 # To compile, type "make" or make "all"
 # To remove files, type "make clean"
 #
-OBJS = server.o request.o segel.o client.o
+OBJS = server.o request.o segel.o client.o Queue.o
 TARGET = server
 
 CC = gcc

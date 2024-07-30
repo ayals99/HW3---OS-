@@ -4,8 +4,21 @@
 #include <pthread.h>
 
 #define NUMBER_OF_SERVER_ARGUMENTS 5
-typdef int* requestArray;
 
+
+void* threadRequestHandler(void* argument);
+
+void overloadHandler(int connfd, char* scheduleAlgorithm);
+
+// size of Queue_working
+int number_of_working_threads = 0;
+
+Queue waitingQueue;
+
+// TODO: Create three arrays that will act as counters:
+requestArray DynamicRequests;
+requestArray StaticRequests;
+requestArray OverallRequests;
 
 // 
 // server.c: A very, very simple web server
@@ -39,9 +52,9 @@ The command line arguments to your web server are to be interpreted as follows:
 
 
 
-// size of Queue_working
-int number_of_working_threads = 0;
-Queue waiting_queue;
+
+
+
 
 
 
@@ -64,29 +77,23 @@ pthread_t* createThreads(int numberOfThreads){
     //      The threads should be created in a for loop.
     //      The number of threads created should be equal to the number of threads
     //      specified in the command line arguments.
-
     pthread_t* threadsArray = malloc(sizeof(pthread_t) * numberOfThreads);
-
     // if malloc failed:
     if (threadsArray == NULL) {
         perror("Error: malloc for threadsArray failed\n");
         exit(1);
     }
-
     for(int i = 0; i < numberOfThreads; i++){
         // TODO: add function instead of FUNCTION
         int* threadID = malloc(sizeof(int));
-
         // if malloc for threadID failed:
         if (threadID == NULL) {
             perror("Error: malloc for threadID failed\n");
             exit(1);
         }
-
         *threadID = i;
-        pthread_create(&threadsArray[i], NULL, FUNCTION, (void*)threadID);
+        pthread_create(&threadsArray[i], NULL, threadRequestHandler, (void*)threadID);
     }
-
     return threads;
 }
 
@@ -100,14 +107,15 @@ int main(int argc, char *argv[])
     getargs(&port, argc, argv, &numberOfThreads,
             &maxQueueSize, scheduleAlgorithm);
 
+
     pthread_t* threadPool = createThreads(numberOfThreads);
+    // TODO: make sure that all threads are blocked when created
+    // so they won't start working before a request comes in.
+    // might want to create a function that will block the threads.
+    // we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
 
-    // TODO: block all threads in the thread pool.
 
-    // TODO: Create three arrays that will act as counters:
-    requestArray Dynamic;
-    requestArray Static;
-    requestArray Overall;
+
 
     /** Explanation:
     // Three arrays that will act as counters.

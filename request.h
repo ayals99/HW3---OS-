@@ -1,5 +1,8 @@
 #ifndef __REQUEST_H__
 
-void requestHandle(int fd);
+typdef int* requestArray;
+
+void requestHandle(int fd , requestArray DynamicArray,
+                   requestArray StaticArray, requestArray OverallArray);
 
 #endif

@@ -152,9 +152,8 @@ void requestServeStatic(int fd, char *filename, int filesize)
 }
 
 // handle a request
-void requestHandle(int fd)
-{
-
+void requestHandle(int fd, requestArray DynamicArray,
+                   requestArray StaticArray, requestArray OverallArray){
    int is_static;
    struct stat sbuf;
    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
@@ -168,28 +167,37 @@ void requestHandle(int fd)
    printf("%s %s %s\n", method, uri, version);
 
    if (strcasecmp(method, "GET")) {
-      requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method");
-      return;
+       OverallArray[fd]++;
+       requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method");
+       return;
    }
+
    requestReadhdrs(&rio);
 
    is_static = requestParseURI(uri, filename, cgiargs);
    if (stat(filename, &sbuf) < 0) {
       requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file");
+       OverallArray[fd]++;
       return;
    }
 
    if (is_static) {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
+         OverallArray[fd]++;
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file");
          return;
       }
+      OverallArray[fd]++;
+      StaticArray[fd]++;
       requestServeStatic(fd, filename, sbuf.st_size);
    } else {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
+          OverallArray[fd]++;
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program");
          return;
       }
+      OverallArray[fd]++;
+      DynamicArray[fd]++;
       requestServeDynamic(fd, filename, cgiargs);
    }
 }
