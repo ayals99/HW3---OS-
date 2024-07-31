@@ -106,17 +106,18 @@ pthread_t* createThreads(int numberOfThreads){
     return threadsArray;
 }
 
-//TODO: check if we need to wait for all threads to finish (by using pthread_join)
-// and then free the array
-//void destroyThreads(pthread_t* threadsArray, int numberOfThreads){
-//    for(int i = 0; i < numberOfThreads; i++){
-//        pthread_join(threadsArray[i], NULL);
-//    }
-//    free(threadsArray);
-//}
+    //TODO: check if we need to wait for all threads to finish (by using pthread_join)
+    // and then free the array
+
+    //void destroyThreads(pthread_t* threadsArray, int numberOfThreads){
+    //    for(int i = 0; i < numberOfThreads; i++){
+    //        pthread_join(threadsArray[i], NULL);
+    //    }
+    //    free(threadsArray);
+    //}
 
 
-
+// From the homework instructions:
 // block : your code for the listening (main) thread should block (not busy wait!) until a
 //          buffer becomes available and then handle the request.
 // drop_tail : your code should drop the new request immediately by closing the socket
@@ -143,27 +144,32 @@ void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
     if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
         // block until a buffer becomes available
 
+        // TODO: write the block implementation
     }
     else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
         // drop_tail: drop new request by closing the socket and continue listening for new requests
 
+        // TODO: drop_tail
 
     }
     else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){
         // drop_head:
-        // drop the oldest request in the queue that is not currently being processed by a thread
-        dequeue(queue);
+        // TODO: drop_head
 
-        // and add the new request to the end of the queue using enqueue:
-
-        struct timeval timeOfArrival_DropHead;
-        gettimeofday(&timeOfArrival_DropHead, NULL);
-
-        enqueue(queue, connfd, timeOfArrival_DropHead);
+//        // drop the oldest request in the queue that is not currently being processed by a thread
+//        dequeue(queue);
+//
+//        // and add the new request to the end of the queue using enqueue:
+//
+//        struct timeval timeOfArrival_DropHead;
+//        gettimeofday(&timeOfArrival_DropHead, NULL);
+//
+//        enqueue(queue, connfd, timeOfArrival_DropHead);
 
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){
         // block_flush
+        // TODO: block_flush
     }
     else if (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL){
         // drop_random
@@ -251,26 +257,28 @@ int main(int argc, char *argv[])
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*)&clientlen);
 
-        //lock the mutex in order to record time of arrival and send the request to be handled.
-        // notice that we also need the lock for the changes we might make to the queue if the buffer is full
-        pthread_mutex_lock(&lock);
-
 
         //
         // HW3: In general, don't handle the request in the main thread.
         // Save the relevant info in a buffer and have one of the worker threads
         // do the work.
-        //
+
+
+//        // TODO: These two lines need to be in the threadRequestHandler function
+//        requestHandle(connfd, timeOfArrival, timeOfHandling, DynamicRequests, StaticRequests, OverallRequests);
+//        Close(connfd);
+
+
+        // Lock the mutex in order to record time of arrival and send the request to be handled.
+        // Notice that we also need the lock for the changes we might make to the queue if the buffer is full
+        pthread_mutex_lock(&lock);
+
 
         // If all threads are busy and the queue is full, we need to handle the overload:
         if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
             handleOverload(waitingQueue, scheduleAlgorithm, connfd, &lock,
                            &conditionBufferAvailable, &conditionQueueEmpty);
         }
-
-//        // TODO: These two lines need to be in the threadRequestHandler function
-//        requestHandle(connfd, timeOfArrival, timeOfHandling, DynamicRequests, StaticRequests, OverallRequests);
-//        Close(connfd);
 
         // record the time of arrival:
         struct timeval timeOfArrival;
@@ -279,6 +287,7 @@ int main(int argc, char *argv[])
         // add the request to the queue:
         enqueue(waitingQueue, connfd, timeOfArrival);
 
+        // TODO: make sure this is the right signal to send
         // signal the condition variable that a buffer is available:
         pthread_cond_signal(&conditionBufferAvailable);
 
