@@ -16,9 +16,9 @@ int number_of_working_threads = ZERO;
 Queue waitingQueue = NULL;
 
 // TODO: Create three arrays that will act as counters:
-requestArray DynamicRequests;
-requestArray StaticRequests;
-requestArray OverallRequests;
+requestCounterArray DynamicRequests;
+requestCounterArray StaticRequests;
+requestCounterArray OverallRequests;
 
 // 
 // server.c: A very, very simple web server
@@ -89,6 +89,15 @@ pthread_t* createThreads(int numberOfThreads){
     }
     return threadsArray;
 }
+
+//TODO: check if we need to wait for all threads to finish (by using pthread_join)
+// and then free the array
+//void destroyThreads(pthread_t* threadsArray, int numberOfThreads){
+//    for(int i = 0; i < numberOfThreads; i++){
+//        pthread_join(threadsArray[i], NULL);
+//    }
+//    free(threadsArray);
+//}
 
 int main(int argc, char *argv[])
 {

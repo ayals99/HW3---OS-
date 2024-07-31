@@ -1,8 +1,12 @@
 #ifndef __REQUEST_H__
 
-typdef int* requestArray;
+#define requestCounterArray int*
 
-void requestHandle(int fd , requestArray DynamicArray,
-                   requestArray StaticArray, requestArray OverallArray);
+
+void requestHandle(int fd, struct timeval timeOfArrival,
+                   struct timeval timeOfHandling,
+                   requestCounterArray DynamicArray,
+                   requestCounterArray StaticArray,
+                   requestCounterArray OverallArray);
 
 #endif

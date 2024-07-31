@@ -1,0 +1,3 @@
+C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/Testing_Queue/cmake-build-debug/CMakeFiles/Testing_Queue.dir
+C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/Testing_Queue/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/Testing_Queue/cmake-build-debug/CMakeFiles/rebuild_cache.dir

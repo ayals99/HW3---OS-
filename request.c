@@ -152,8 +152,11 @@ void requestServeStatic(int fd, char *filename, int filesize)
 }
 
 // handle a request
-void requestHandle(int fd, requestArray DynamicArray,
-                   requestArray StaticArray, requestArray OverallArray){
+void requestHandle(int fd, struct timeval timeOfArrival,
+                            struct timeval timeOfHandling,
+                            requestCounterArray DynamicArray,
+                            requestCounterArray StaticArray,
+                            requestCounterArray OverallArray){
    int is_static;
    struct stat sbuf;
    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];

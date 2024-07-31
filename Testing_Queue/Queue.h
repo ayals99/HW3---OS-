@@ -1,15 +1,15 @@
 #ifndef WEBSERVER_FILES_QUEUE_H
 #define WEBSERVER_FILES_QUEUE_H
-#include "segel.h"
-#include "request.h"
-#include <stdbool.h>
 
-#define INITIAL_QUEUE_SIZE 0
+#include <stdbool.h>
+#include <sys/time.h>
+#include <stdlib.h>
+
 #define EMPTY_QUEUE (-1)
 #define OUT_OF_QUEUE_BOUNDS (-2)
+#define INITIAL_QUEUE_SIZE 0
 
-
-/** Typedefs **/
+/** Typdefs **/
 typedef struct node* Node;
 typedef struct queue* Queue;
 
