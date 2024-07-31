@@ -5,20 +5,36 @@
 
 #define NUMBER_OF_SERVER_ARGUMENTS 5
 #define ZERO 0
+#define IDENTICAL 0
+
+// Scheduling algorithms: Must be one of "block", "dt", "dh", "bf" or "random".
+#define BLOCK_ALGORITHM "block"
+#define DROP_TAIL_ALGORITHM "dt"
+#define DROP_HEAD_ALGORITHM "dh"
+#define BLOCK_FLUSH_ALGORITHM "bf"
+#define DROP_RANDOM_ALGORITHM "random"
 
 void* threadRequestHandler(void* argument);
 
-void overloadHandler(int connfd, char* scheduleAlgorithm);
+void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
+                    pthread_mutex_t* mutex_lock,
+                    pthread_cond_t* conditionBufferAvailable,
+                    pthread_cond_t* conditionQueueEmpty);
 
-// size of Queue_working:
-int number_of_working_threads = ZERO;
+/** Mutex and condition variables: */
+pthread_mutex_t lock;
+pthread_cond_t conditionBufferAvailable;
+pthread_cond_t conditionQueueEmpty;
 
+// A queue that will hold the requests that are waiting to be handled:
 Queue waitingQueue = NULL;
 
 // TODO: Create three arrays that will act as counters:
-requestCounterArray DynamicRequests;
-requestCounterArray StaticRequests;
-requestCounterArray OverallRequests;
+int* DynamicRequests = NULL;
+int* StaticRequests = NULL;
+int* OverallRequests = NULL;
+
+int threadsAtWorkCounter = 0;
 
 // 
 // server.c: A very, very simple web server
@@ -99,12 +115,94 @@ pthread_t* createThreads(int numberOfThreads){
 //    free(threadsArray);
 //}
 
+
+
+// block : your code for the listening (main) thread should block (not busy wait!) until a
+//          buffer becomes available and then handle the request.
+// drop_tail : your code should drop the new request immediately by closing the socket
+//              and continue listening for new requests.
+// drop_head : your code should drop the oldest request in the queue that is not
+//            currently being processed by a thread and add the new request to the end of the
+//            queue.
+// block_flush : your code for the listening (main) thread should block (not busy wait!)
+//               until the queue is empty and none of the threads handles a request and then drop
+//               the request.
+// Bonus - drop_random : when the queue is full and a new request arrives, drop
+//                      50% of the requests in the queue (that are not handled
+//                      by a thread) randomly.
+//                      You can use the rand() function to choose which to drop.
+//                      An example of this function is in output.c.
+//                      Once old requests have been dropped,
+//                      you can add the new request to the queue.
+
+
+void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
+                    pthread_mutex_t* mutex_lock,
+                    pthread_cond_t* condBufferAvailable,
+                    pthread_cond_t* condQueueEmpty){
+    if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
+        // block until a buffer becomes available
+
+    }
+    else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
+        // drop_tail: drop new request by closing the socket and continue listening for new requests
+
+
+    }
+    else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){
+        // drop_head:
+        // drop the oldest request in the queue that is not currently being processed by a thread
+        dequeue(queue);
+
+        // and add the new request to the end of the queue using enqueue:
+
+        struct timeval timeOfArrival_DropHead;
+        gettimeofday(&timeOfArrival_DropHead, NULL);
+
+        enqueue(queue, connfd, timeOfArrival_DropHead);
+
+    }
+    else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){
+        // block_flush
+    }
+    else if (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL){
+        // drop_random
+
+        // Calculate 50% of the requests in the queue:
+        // Question 409 in piazza says to round upwards,
+        // so we will add 1 to the division
+        // before dividing by 2.
+        int numberOfRequestsToDrop = (getQueueSize(queue ) + 1) / 2 ;
+
+        // drop the requests, in a for loop:
+        for (int i = 0; i < numberOfRequestsToDrop; i++){
+            // generate a random number between 0 and the size of the queue - 1
+            // notice that rand() return a number between 0 and RAND_MAX, so
+            // we need to use the modulo operator to get a number between 0 and
+            // the size of the queue - 1
+            int randomIndexInQueue = rand() % getQueueSize(queue);
+
+            // drop the request in index randomNumberInRange
+            // by de-queueing it from the waiting queue
+            dequeueByNumberInLine(queue, randomIndexInQueue);
+        }
+    }
+    else {
+        perror("Error: Invalid scheduling algorithm\n");
+        exit(1);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     int listenfd, connfd, port, clientlen;
     struct sockaddr_in clientaddr;
     int numberOfThreads, maxQueueSize;
     char* scheduleAlgorithm = NULL;
+
+    // A counter for the amount of threads that area working at each given time:
+    int number_of_working_threads = ZERO;
+
 
     getargs(&port, argc, argv, &numberOfThreads,
             &maxQueueSize, scheduleAlgorithm);
@@ -127,7 +225,23 @@ int main(int argc, char *argv[])
     // Overall requests handled.
     **/
 
+
+    DynamicRequests = malloc(sizeof(*DynamicRequests) * numberOfThreads);
+    StaticRequests = malloc(sizeof(*StaticRequests) * numberOfThreads);
+    OverallRequests = malloc(sizeof(*OverallRequests) * numberOfThreads);
+
+    // if malloc failed:
+    if (DynamicRequests == NULL || StaticRequests == NULL || OverallRequests == NULL) {
+        perror("Error: malloc for request counter array failed\n");
+        exit(1);
+    }
+
     // TODO: Initialize all three arrays to 0.
+    for (int i = 0; i < numberOfThreads; i++){
+        DynamicRequests[i] = 0;
+        StaticRequests[i] = 0;
+        OverallRequests[i] = 0;
+    }
 
 
     listenfd = Open_listenfd(port);
@@ -137,15 +251,39 @@ int main(int argc, char *argv[])
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*)&clientlen);
 
+        //lock the mutex in order to record time of arrival and send the request to be handled.
+        // notice that we also need the lock for the changes we might make to the queue if the buffer is full
+        pthread_mutex_lock(&lock);
+
+
         //
         // HW3: In general, don't handle the request in the main thread.
         // Save the relevant info in a buffer and have one of the worker threads
         // do the work.
         //
 
-        requestHandle(connfd, DynamicRequests, StaticRequests, OverallRequests);
+        // If all threads are busy and the queue is full, we need to handle the overload:
+        if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
+            handleOverload(waitingQueue, scheduleAlgorithm, connfd, &lock,
+                           &conditionBufferAvailable, &conditionQueueEmpty);
+        }
 
-        Close(connfd);
+//        // TODO: These two lines need to be in the threadRequestHandler function
+//        requestHandle(connfd, timeOfArrival, timeOfHandling, DynamicRequests, StaticRequests, OverallRequests);
+//        Close(connfd);
+
+        // record the time of arrival:
+        struct timeval timeOfArrival;
+        gettimeofday(&timeOfArrival, NULL);
+
+        // add the request to the queue:
+        enqueue(waitingQueue, connfd, timeOfArrival);
+
+        // signal the condition variable that a buffer is available:
+        pthread_cond_signal(&conditionBufferAvailable);
+
+        // unlock the mutex:
+        pthread_mutex_unlock(&lock);
     }
 
 }
