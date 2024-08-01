@@ -16,10 +16,7 @@
 
 void* threadRequestHandler(void* argument);
 
-void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
-                    pthread_mutex_t* mutex_lock,
-                    pthread_cond_t* conditionBufferAvailable,
-                    pthread_cond_t* conditionQueueEmpty);
+bool handleOverload(char* scheduleAlgorithm, int connfd);
 
 /** Mutex and condition variables: */
 pthread_mutex_t lock;
@@ -136,11 +133,10 @@ pthread_t* createThreads(int numberOfThreads){
 //                      Once old requests have been dropped,
 //                      you can add the new request to the queue.
 
-
-void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
-                    pthread_mutex_t* mutex_lock,
-                    pthread_cond_t* condBufferAvailable,
-                    pthread_cond_t* condQueueEmpty){
+/** return values:
+ * // false if the new request was dropped
+ * // true if the new request needs to be enqueued */
+bool handleOverload(char* scheduleAlgorithm, int connfd){
     if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
         // block until a buffer becomes available
 
@@ -150,7 +146,7 @@ void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
         // drop_tail: drop new request by closing the socket and continue listening for new requests
 
         // TODO: drop_tail
-
+        return false;
     }
     else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){
         // drop_head:
@@ -158,13 +154,8 @@ void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
 
 //        // drop the oldest request in the queue that is not currently being processed by a thread
 //        dequeue(queue);
-//
-//        // and add the new request to the end of the queue using enqueue:
-//
-//        struct timeval timeOfArrival_DropHead;
-//        gettimeofday(&timeOfArrival_DropHead, NULL);
-//
-//        enqueue(queue, connfd, timeOfArrival_DropHead);
+
+        return true;
 
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){
@@ -178,7 +169,7 @@ void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
         // Question 409 in piazza says to round upwards,
         // so we will add 1 to the division
         // before dividing by 2.
-        int numberOfRequestsToDrop = (getQueueSize(queue ) + 1) / 2 ;
+        int numberOfRequestsToDrop = (getQueueSize(waitingQueue ) + 1) / 2 ;
 
         // drop the requests, in a for loop:
         for (int i = 0; i < numberOfRequestsToDrop; i++){
@@ -186,11 +177,11 @@ void handleOverload(Queue queue, char* scheduleAlgorithm, int connfd,
             // notice that rand() return a number between 0 and RAND_MAX, so
             // we need to use the modulo operator to get a number between 0 and
             // the size of the queue - 1
-            int randomIndexInQueue = rand() % getQueueSize(queue);
+            int randomIndexInQueue = rand() % getQueueSize(waitingQueue);
 
             // drop the request in index randomNumberInRange
             // by de-queueing it from the waiting queue
-            dequeueByNumberInLine(queue, randomIndexInQueue);
+            dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
         }
     }
     else {
@@ -268,24 +259,25 @@ int main(int argc, char *argv[])
 //        requestHandle(connfd, timeOfArrival, timeOfHandling, DynamicRequests, StaticRequests, OverallRequests);
 //        Close(connfd);
 
-
-        // Lock the mutex in order to record time of arrival and send the request to be handled.
-        // Notice that we also need the lock for the changes we might make to the queue if the buffer is full
-        pthread_mutex_lock(&lock);
-
-
-        // If all threads are busy and the queue is full, we need to handle the overload:
-        if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
-            handleOverload(waitingQueue, scheduleAlgorithm, connfd, &lock,
-                           &conditionBufferAvailable, &conditionQueueEmpty);
-        }
-
-        // record the time of arrival:
+        // record the time of arrival before locking the mutex:
         struct timeval timeOfArrival;
         gettimeofday(&timeOfArrival, NULL);
 
-        // add the request to the queue:
-        enqueue(waitingQueue, connfd, timeOfArrival);
+        // Lock the mutex in order to send the request to be handled.
+        // We also need the lock for the changes we might make to the queue if the buffer is full
+        pthread_mutex_lock(&lock);
+
+        // If all threads are busy and the queue is full, we need to handle the overload:
+        bool needToEnqueue = true;
+        if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
+            // get a return status handleOverload function in case of drop tail (because then we don't need to enque)
+            needToEnqueue = handleOverload(scheduleAlgorithm, connfd);
+        }
+
+        // add the request to the queue (if we dropped the request, we don't need to enqueue):
+        if (needToEnqueue) {
+            enqueue(waitingQueue, connfd, timeOfArrival);
+        }
 
         // TODO: make sure this is the right signal to send
         // signal the condition variable that a buffer is available:
@@ -294,7 +286,6 @@ int main(int argc, char *argv[])
         // unlock the mutex:
         pthread_mutex_unlock(&lock);
     }
-
 }
 
 
