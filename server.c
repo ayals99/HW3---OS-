@@ -20,8 +20,10 @@ bool handleOverload(char* scheduleAlgorithm, int connfd);
 
 /** Mutex and condition variables: */
 pthread_mutex_t lock;
-pthread_cond_t conditionBufferAvailable;
+
+pthread_cond_t conditionQueueFull;
 pthread_cond_t conditionQueueEmpty;
+pthread_cond_t conditionThreadsIdle;
 
 // A queue that will hold the requests that are waiting to be handled:
 Queue waitingQueue = NULL;
@@ -65,8 +67,8 @@ The command line arguments to your web server are to be interpreted as follows:
 
 
 void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
-             int* maxQueueSize, char* scheduleAlgorithm)
-{
+             int* maxQueueSize, char* scheduleAlgorithm){
+    // according to Question 434 in piazza, we can assume that all arguments are valid
     if (argc < NUMBER_OF_SERVER_ARGUMENTS) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
         exit(1);
@@ -77,12 +79,11 @@ void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
     scheduleAlgorithm = argv[4];
 }
 
-
+//      Function that will create the threads.
+//      The threads should be created in a for loop.
+//      The number of threads created should be equal to the number of threads
+//      specified in the command line arguments.
 pthread_t* createThreads(int numberOfThreads){
-    //      Function that will create the threads.
-    //      The threads should be created in a for loop.
-    //      The number of threads created should be equal to the number of threads
-    //      specified in the command line arguments.
     pthread_t* threadsArray = malloc(sizeof(pthread_t) * numberOfThreads);
     // if malloc failed:
     if (threadsArray == NULL) {
@@ -90,7 +91,7 @@ pthread_t* createThreads(int numberOfThreads){
         exit(1);
     }
     for(int i = 0; i < numberOfThreads; i++){
-        // TODO: add function instead of FUNCTION
+        // TODO: add function instead of threadRequestHandler
         int* threadID = malloc(sizeof(int));
         // if malloc for threadID failed:
         if (threadID == NULL) {
@@ -102,17 +103,6 @@ pthread_t* createThreads(int numberOfThreads){
     }
     return threadsArray;
 }
-
-    //TODO: check if we need to wait for all threads to finish (by using pthread_join)
-    // and then free the array
-
-    //void destroyThreads(pthread_t* threadsArray, int numberOfThreads){
-    //    for(int i = 0; i < numberOfThreads; i++){
-    //        pthread_join(threadsArray[i], NULL);
-    //    }
-    //    free(threadsArray);
-    //}
-
 
 // From the homework instructions:
 // block : your code for the listening (main) thread should block (not busy wait!) until a
@@ -141,19 +131,21 @@ bool handleOverload(char* scheduleAlgorithm, int connfd){
         // block until a buffer becomes available
 
         // TODO: write the block implementation
+
     }
     else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
         // drop_tail: drop new request by closing the socket and continue listening for new requests
 
         // TODO: drop_tail
+
         return false;
     }
     else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){
         // drop_head:
         // TODO: drop_head
 
-//        // drop the oldest request in the queue that is not currently being processed by a thread
-//        dequeue(queue);
+        // drop the oldest request in the queue that is not currently being processed by a thread:
+        dequeue(waitingQueue);
 
         return true;
 
@@ -162,13 +154,12 @@ bool handleOverload(char* scheduleAlgorithm, int connfd){
         // block_flush
         // TODO: block_flush
     }
-    else if (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL){
+    else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL)
         // drop_random
 
         // Calculate 50% of the requests in the queue:
         // Question 409 in piazza says to round upwards,
-        // so we will add 1 to the division
-        // before dividing by 2.
+        // so we will add 1 to the division before dividing by 2.
         int numberOfRequestsToDrop = (getQueueSize(waitingQueue ) + 1) / 2 ;
 
         // drop the requests, in a for loop:
@@ -184,10 +175,8 @@ bool handleOverload(char* scheduleAlgorithm, int connfd){
             dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
         }
     }
-    else {
-        perror("Error: Invalid scheduling algorithm\n");
-        exit(1);
-    }
+
+    return true;
 }
 
 int main(int argc, char *argv[])
@@ -248,29 +237,17 @@ int main(int argc, char *argv[])
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t*)&clientlen);
 
-
-        //
-        // HW3: In general, don't handle the request in the main thread.
-        // Save the relevant info in a buffer and have one of the worker threads
-        // do the work.
-
-
-//        // TODO: These two lines need to be in the threadRequestHandler function
-//        requestHandle(connfd, timeOfArrival, timeOfHandling, DynamicRequests, StaticRequests, OverallRequests);
-//        Close(connfd);
-
         // record the time of arrival before locking the mutex:
         struct timeval timeOfArrival;
         gettimeofday(&timeOfArrival, NULL);
 
-        // Lock the mutex in order to send the request to be handled.
-        // We also need the lock for the changes we might make to the queue if the buffer is full
+        // Lock the mutex in order to send the request to be handled and in the buffer is full
         pthread_mutex_lock(&lock);
 
         // If all threads are busy and the queue is full, we need to handle the overload:
         bool needToEnqueue = true;
         if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
-            // get a return status handleOverload function in case of drop tail
+            // get a return status from handleOverload in case of drop tail
             // (because then we don't need to enqueue the request)
             needToEnqueue = handleOverload(scheduleAlgorithm, connfd);
         }
