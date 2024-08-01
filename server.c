@@ -270,7 +270,8 @@ int main(int argc, char *argv[])
         // If all threads are busy and the queue is full, we need to handle the overload:
         bool needToEnqueue = true;
         if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
-            // get a return status handleOverload function in case of drop tail (because then we don't need to enque)
+            // get a return status handleOverload function in case of drop tail
+            // (because then we don't need to enqueue the request)
             needToEnqueue = handleOverload(scheduleAlgorithm, connfd);
         }
 
