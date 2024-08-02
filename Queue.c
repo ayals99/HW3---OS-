@@ -23,7 +23,6 @@ struct queue{
     Node m_head;
     Node m_tail;
     int m_current_size;
-    int m_max_size;
 };
 
 /** Constructors and Destructors **/
@@ -151,8 +150,4 @@ int getQueueSize(Queue queue){
 
 bool empty(Queue queue){
     return queue->m_current_size == 0;
-}
-
-bool full(Queue queue){
-    return queue->m_current_size == queue->m_max_size;
 }

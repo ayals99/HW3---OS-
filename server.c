@@ -16,17 +16,15 @@
 
 void* threadRequestHandler(void* argument);
 
-bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue);
+bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int threadTotalAmount);
 
 /** Mutex and condition variables: */
 pthread_mutex_t lock;
 
 // Condition variables:
-pthread_cond_t conditionQueueFull;
-pthread_cond_t conditionQueueNotEmpty;
-pthread_cond_t conditionQueueEmpty;
-pthread_cond_t conditionThreadsIdle;
-pthread_cond_t conditionBufferAvailable;
+pthread_cond_t conditionQueueNotEmpty; // for the threads in the pool to wait until there is a request in the queue
+pthread_cond_t conditionBlockFlush; // for the main thread to wait until the queue is empty and all threads are idle (for block_flush)
+pthread_cond_t conditionBufferAvailable; // for the main thread to wait until a buffer becomes available (for block)
 
 // A queue that will hold the requests that are waiting to be handled:
 Queue waitingQueue = NULL;
@@ -37,6 +35,7 @@ int* StaticRequests = NULL;
 int* OverallRequests = NULL;
 
 int threadsAtWorkCounter = ZERO;
+
 
 
 // server.c: A very, very simple web server
@@ -107,6 +106,8 @@ pthread_t* createThreads(int numberOfThreads){
     return threadsArray;
 }
 
+
+
 // From the homework instructions:
 // block : your code for the listening (main) thread should block (not busy wait!) until a
 //          buffer becomes available and then handle the request.
@@ -129,46 +130,37 @@ pthread_t* createThreads(int numberOfThreads){
 /** return values:
  * // false if the new request was dropped
  * // true (by default) if the new request needs to be enqueued */
-bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue){
+bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int maxRequestsAllowed){
     if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
-        // TODO: review block
-
         // TODO: need to make sure that the request handler knows to signal the main thread
         //  if the queue was full and we finished handling the request:
-
-        // block until a buffer becomes available
-        pthread_cond_wait(&conditionBufferAvailable, &lock);
-
-        *addedRequestToQueue = true;
-
-
-
+        while(threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
+            // block until a buffer becomes available
+            pthread_cond_wait(&conditionBufferAvailable, &lock);
+        }
+        *addedRequestToQueue = true; // "main" will add the new request to the queue
     }
     else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
         // drop_tail: drop new request by closing the socket and continue listening for new requests
-        // TODO: review drop_tail
         Close(connfd);
-        return false; // no request was added to the queue
+        return false; // new request will NOT be added to the queue
     }
     else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){ // drop_head
-
-        // TODO: review drop_head
-
-        // drop the oldest request in the queue that is not currently being processed by a thread:
-        dequeue(waitingQueue);
-        *addedRequestToQueue = true;
+        if (!empty(waitingQueue)){
+                // drop the oldest request in the queue that is not currently being processed by a thread:
+                int headFD = dequeue(waitingQueue);
+                Close(headFD);
+        }
+        *addedRequestToQueue = true; // "main" will add the new request to the queue
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
-        // TODO: review block_flush
-
         // wait for the queue to be empty and none of the threads handles a request
-        pthread_cond_wait(&conditionThreadsIdle, &lock);
-        pthread_cond_wait(&conditionQueueEmpty, &lock);
+        pthread_cond_wait(&conditionBlockFlush, &lock);
 
         // and then drop the request:
         Close(connfd);
 
-        return false; // no request was added to the queue
+        return false; // new request will NOT be added to the queue
     }
     else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL) // drop_random
 
@@ -187,7 +179,8 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
 
             // drop the request in index randomNumberInRange
             // by de-queueing it from the waiting queue
-            dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
+            int toClose = dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
+            Close(toClose);
         }
         *addedRequestToQueue = true;
     }
@@ -198,21 +191,19 @@ int main(int argc, char *argv[])
 {
     int listenfd, connfd, port, clientlen;
     struct sockaddr_in clientaddr;
-    int numberOfThreads, maxQueueSize;
+    int numberOfThreads, maxRequestsAllowed;
     char* scheduleAlgorithm = NULL;
 
     // A counter for the amount of threads that area working at each given time:
     int number_of_working_threads = ZERO;
 
     getargs(&port, argc, argv, &numberOfThreads,
-            &maxQueueSize, scheduleAlgorithm);
+            &maxRequestsAllowed, scheduleAlgorithm);
 
     // Initialize the lock and the condition variables:
     pthread_mutex_init(&lock, NULL);
-    pthread_cond_init(&conditionQueueFull, NULL);
     pthread_cond_init(&conditionQueueNotEmpty, NULL);
-    pthread_cond_init(&conditionQueueEmpty, NULL);
-    pthread_cond_init(&conditionThreadsIdle, NULL);
+    pthread_cond_init(&conditionBlockFlush, NULL);
     pthread_cond_init(&conditionBufferAvailable, NULL);
 
 
@@ -264,10 +255,10 @@ int main(int argc, char *argv[])
         // If all threads are busy and the queue is full, we need to handle the overload:
         bool needToEnqueue = true;
         bool addedRequestToQueue = false;
-        if (threadsAtWorkCounter == numberOfThreads && full(waitingQueue)){
+        if (threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
             // save the status that is returned from handleOverload in case of drop_tail
             // (because then we don't need to enqueue the request)
-            needToEnqueue = handleOverload(scheduleAlgorithm, connfd, &addedRequestToQueue);
+            needToEnqueue = handleOverload(scheduleAlgorithm, connfd, &addedRequestToQueue, maxRequestsAllowed);
         }
 
         // add the request to the queue (if we dropped the request, we don't need to enqueue):
