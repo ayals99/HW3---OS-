@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
 //        perror("Error: malloc for request counter array failed\n");
 //        exit(1);
 //    }
-
+ 
     // TODO: Initialize all three arrays to 0.
     for (int i = 0; i < numberOfThreads; i++){
         DynamicRequests[i] = ZERO;
