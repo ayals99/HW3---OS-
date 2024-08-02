@@ -133,7 +133,7 @@ pthread_t* createThreads(int numberOfThreads){
 bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int maxRequestsAllowed){
     if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
         // TODO: need to make sure that the request handler knows to signal the main thread
-        //  if the queue was full and we finished handling the request:
+        //  if the buffer is now available (i.e. they finished working on a request):
         while(threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
             // block until a buffer becomes available
             pthread_cond_wait(&conditionBufferAvailable, &lock);
@@ -154,6 +154,8 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
         *addedRequestToQueue = true; // "main" will add the new request to the queue
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
+        // TODO: need to make sure that the request handler knows to signal the main thread
+        //  when the queue is empty and they were the last thread working
         // wait for the queue to be empty and none of the threads handles a request
         pthread_cond_wait(&conditionBlockFlush, &lock);
 
