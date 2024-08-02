@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
         pthread_mutex_lock(&lock);
 
         // If all threads are busy and the queue is full, we need to handle the overload:
-        bool needToEnqueue = true;
+        bool needToEnqueue = true; 
         bool addedRequestToQueue = false;
         if (threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
             // save the status that is returned from handleOverload in case of drop_tail
