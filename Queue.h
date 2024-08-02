@@ -20,6 +20,7 @@ void queueDestructor(Queue queue);
 /** Queue implementation **/
 void enqueue(Queue queue, int fd, struct timeval time_of_arrival);
 int dequeue(Queue queue);
+int dequeueLatest(Queue queue);
 int dequeueByNumberInLine(Queue queue, int numberInLine);
 struct timeval getHeadsArrivalTime(Queue queue);
 int getQueueSize(Queue queue);

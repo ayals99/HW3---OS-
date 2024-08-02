@@ -6,6 +6,7 @@ struct node{
     int m_fd;
     struct timeval m_timeOfArrival;
     Node m_next;
+    Node m_previous;
 };
 /** Node implementation */
 
@@ -14,6 +15,7 @@ Node createNode(int fd, struct timeval time_of_arrival){
     newNode->m_fd = fd;
     newNode->m_timeOfArrival = time_of_arrival;
     newNode->m_next = NULL;
+    newNode->m_previous = NULL;
 
     return newNode;
 }
@@ -31,7 +33,6 @@ Queue queueConstructor(int max_size){
     newQueue->m_head = NULL;
     newQueue->m_tail = NULL;
     newQueue->m_current_size = INITIAL_QUEUE_SIZE;
-    newQueue->m_max_size = max_size;
 
     return newQueue;
 }
@@ -62,7 +63,9 @@ void enqueue(Queue queue, int fd, struct timeval time_of_arrival){
     }
     else {
         // add the new node after the current tail node
+
         queue->m_tail->m_next = newNode;
+        newNode->m_previous = queue->m_tail;
 
         // assign the new node to be the tail node
         queue->m_tail = newNode;
@@ -78,10 +81,15 @@ int dequeue(Queue queue){
         return EMPTY_QUEUE;
     }
     // save the head node in order to free it later
-    Node temp = queue->m_head;
+    Node originalHead = queue->m_head;
 
     // move the head to the next node
     queue->m_head = queue->m_head->m_next;
+
+    // need to update the previous pointer of the new head to be NULL
+    if (queue->m_head != NULL){
+        queue->m_head->m_previous = NULL;
+    }
 
     queue->m_current_size--;
 
@@ -89,8 +97,8 @@ int dequeue(Queue queue){
         queue->m_tail = queue->m_head;
     }
 
-    int fd = temp->m_fd;
-    free(temp);
+    int fd = originalHead->m_fd;
+    free(originalHead);
 
     return fd;
 }
@@ -106,7 +114,7 @@ int dequeueByNumberInLine(Queue queue, int numberInLine){
     if (empty(queue)){
         return EMPTY_QUEUE;
     }
-    if (numberInLine >= queue->m_current_size){
+    if (numberInLine >= queue->m_current_size || numberInLine < 0){
         return OUT_OF_QUEUE_BOUNDS;
     }
 
@@ -118,13 +126,19 @@ int dequeueByNumberInLine(Queue queue, int numberInLine){
         current = current->m_next;
     }
 
-    // if the node we want to delete is first in line, i.e numberInLine == 0
-    if (previous == NULL){
-        queue->m_head = current->m_next;
+    // if the node we want to delete is first in line
+    if (numberInLine == 0){
+        Node newHead = current->m_next;
+        queue->m_head = newHead;
+        if (newHead != NULL){
+            newHead->m_previous = NULL;
+        }
     }
-
     else { // if the node we want to delete is not first in line, i.e numberInLine > 0
         previous->m_next = current->m_next;
+        if(current->m_next != NULL){
+            current->m_next->m_previous = previous;
+        }
     }
 
     int fd = current->m_fd;
@@ -150,4 +164,29 @@ int getQueueSize(Queue queue){
 
 bool empty(Queue queue){
     return queue->m_current_size == 0;
+}
+
+int dequeueLatest(Queue queue){
+    if (empty(queue)){
+        return EMPTY_QUEUE;
+    }
+    Node originalTail = queue->m_tail;
+    Node newTail = originalTail->m_previous;
+
+    if (newTail == NULL){
+        // if the queue has only one node
+        queue->m_head = NULL;
+        queue->m_tail = NULL;
+    }
+    else {
+        newTail->m_next = NULL;
+        queue->m_tail = newTail;
+    }
+
+    int fd = originalTail->m_fd;
+    free(originalTail);
+
+    queue->m_current_size--;
+
+    return fd;
 }
