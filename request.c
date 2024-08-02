@@ -8,8 +8,8 @@
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
 void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg,
                             struct timeval arrivalTime, struct timeval dispatch,
-                            int* DynamicRequests, int* StaticRequests, int* OverallRequests, int threadID)
-{
+                            int dynamicRequestsHandled, int staticRequestsHandled,
+                            int overallRequestsHandled, int threadID) {
    char buf[MAXLINE], body[MAXBUF];
 
    // Create the body of the error message
@@ -38,18 +38,18 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 
    sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
 
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
 
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, DynamicRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
+
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
 
    // Write out the content
    Rio_writen(fd, body, strlen(body));
    printf("%s", body);
-
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
 }
 
 
@@ -119,13 +119,12 @@ void requestGetFiletype(char *filename, char *filetype)
 
 void requestServeDynamic(int fd, char *filename, char *cgiargs,
                          struct timeval arrivalTime, struct timeval dispatch,
-                         int* DynamicRequests, int* StaticRequests,
-                         int* OverallRequests, int threadID)
+                         int dynamicRequestsHandled, int staticRequestsHandled,
+                         int overallRequestsHandled, int threadID)
 {
    char buf[MAXLINE], *emptylist[] = {NULL};
-
-   // The server does only a little bit of the header.  
-   // The CGI script has to finish writing out the header.
+   // The server does only a little bit of the header.
+//    The CGI script has to finish writing out the header.
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
     sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
 
@@ -135,29 +134,31 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs,
 
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-    sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallRequests[threadID]);
+    sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
 
-    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticRequests[threadID]);
+    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
 
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, DynamicRequests[threadID]);
+    Rio_writen(fd, buf, strlen(buf));
 
-   Rio_writen(fd, buf, strlen(buf));
-   int pid = 0;
-   if ((pid = Fork()) == 0) {
+    int pid = 0;
+
+    if ((pid = Fork()) == 0) {
       /* Child process */
       Setenv("QUERY_STRING", cgiargs, 1);
       /* When the CGI process writes to stdout, it will instead go to the socket */
       Dup2(fd, STDOUT_FILENO);
       Execve(filename, emptylist, environ);
-   }
-   WaitPid(pid, NULL, WUNTRACED);
+    }
+    WaitPid(pid, NULL, WUNTRACED);
 }
 
 
 void requestServeStatic(int fd, char *filename, int filesize,
                         struct timeval arrival, struct timeval dispatch,
-                        int* DynamicRequests, int* StaticRequests,
-                        int* OverallRequests, int threadID)
+                        int dynamicRequestsHandled,
+                        int staticRequestsHandled,
+                        int overallRequestsHandled, int threadID)
 {
    int srcfd;
    char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -181,11 +182,11 @@ void requestServeStatic(int fd, char *filename, int filesize,
 
    sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
 
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
 
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, DynamicRequests[threadID]);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
 
    Rio_writen(fd, buf, strlen(buf));
 
@@ -212,17 +213,25 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    Rio_readlineb(&rio, buf, MAXLINE);
    sscanf(buf, "%s %s %s", method, uri, version);
 
-   // calculate dispatch time
+   printf("%s %s %s\n", method, uri, version);
+
+   /** Increment the total number of requests: */
+   OverallArray[fd]++;
+
+   /** calculate dispatch time: */
    struct timeval dispatch;
    timersub(&timeOfHandling, &timeOfArrival, &dispatch);
 
-   printf("%s %s %s\n", method, uri, version);
-
-   OverallArray[fd]++;
+   int staticRequestsHandled = StaticArray[threadID];
+   int dynamicRequestsHandled = DynamicArray[threadID];
+   int overallRequestsHandled = OverallArray[threadID];
 
    if (strcasecmp(method, "GET")) {
        requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method",
-                    timeOfArrival, dispatch, DynamicArray, StaticArray, OverallArray, threadID);
+                    timeOfArrival, dispatch,
+                    dynamicRequestsHandled,
+                    staticRequestsHandled,
+                    overallRequestsHandled, threadID);
        return;
    }
 
@@ -231,29 +240,39 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    is_static = requestParseURI(uri, filename, cgiargs);
    if (stat(filename, &sbuf) < 0) {
        requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file",
-                    timeOfArrival, dispatch, DynamicArray, StaticArray, OverallArray, threadID);
+                    timeOfArrival, dispatch,
+                    dynamicRequestsHandled,
+                    staticRequestsHandled,
+                    overallRequestsHandled, threadID);
        return;
    }
 
    if (is_static) {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file",
-                      timeOfArrival, dispatch, DynamicArray, StaticArray, OverallArray, threadID);
+                      timeOfArrival, dispatch,
+                      dynamicRequestsHandled,
+                      staticRequestsHandled,
+                      overallRequestsHandled, threadID);
          return;
       }
       StaticArray[fd]++;
       requestServeStatic(fd, filename, sbuf.st_size, timeOfArrival, dispatch,
-                         DynamicArray, StaticArray, OverallArray, threadID);
+                         dynamicRequestsHandled, staticRequestsHandled,
+                         overallRequestsHandled, threadID);
    }
    else {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program",
-                      timeOfArrival, dispatch, DynamicArray, StaticArray, OverallArray, threadID);
+                      timeOfArrival, dispatch,
+                      dynamicRequestsHandled, staticRequestsHandled,
+                      overallRequestsHandled, threadID);
          return;
       }
       DynamicArray[fd]++;
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
-                          DynamicArray, StaticArray, OverallArray, threadID);
+                          dynamicRequestsHandled, staticRequestsHandled,
+                          overallRequestsHandled, threadID);
    }
 }
 
