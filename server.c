@@ -14,7 +14,7 @@
 #define BLOCK_FLUSH_ALGORITHM "bf"
 #define DROP_RANDOM_ALGORITHM "random"
 
-void* threadRequestHandler(void* argument);
+void* threadRequestHandler(void* threadID);
 
 bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int threadTotalAmount);
 
@@ -212,9 +212,9 @@ int main(int argc, char *argv[])
     pthread_t* threadPool = createThreads(numberOfThreads);
 
     // TODO: make sure that all threads are blocked when created
-    // so they won't start working before a request comes in.
-    // might want to create a function that will block the threads.
-    // we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
+    //  so they won't start working before a request comes in.
+    //  might want to create a function that will block the threads.
+    //  we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
 
     /** Explanation:
     // Three arrays that will act as counters.
@@ -279,9 +279,3 @@ int main(int argc, char *argv[])
         pthread_mutex_unlock(&lock);
     }
 }
-
-
-    
-
-
- 

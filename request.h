@@ -7,6 +7,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                    struct timeval timeOfHandling,
                    requestCounterArray DynamicArray,
                    requestCounterArray StaticArray,
-                   requestCounterArray OverallArray);
+                   requestCounterArray OverallArray,
+                   int threadID);
 
 #endif
