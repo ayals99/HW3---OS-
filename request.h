@@ -1,5 +1,7 @@
 #ifndef __REQUEST_H__
 
+#include "Queue.h"
+
 #define requestCounterArray int*
 
 
@@ -8,6 +10,6 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                    requestCounterArray DynamicArray,
                    requestCounterArray StaticArray,
                    requestCounterArray OverallArray,
-                   int threadID);
+                   int threadID, Queue queue);
 
 #endif

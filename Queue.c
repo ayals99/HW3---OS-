@@ -158,6 +158,16 @@ struct timeval getHeadsArrivalTime(Queue queue){
     return queue->m_head->m_timeOfArrival;
 }
 
+struct timeval getTailsArrivalTime(Queue queue){
+    if (empty(queue)){
+        struct timeval emptyTime;
+        emptyTime.tv_sec = -1;
+        emptyTime.tv_usec = -1;
+        return emptyTime;
+    }
+    return queue->m_tail->m_timeOfArrival;
+}
+
 int getQueueSize(Queue queue){
     return queue->m_current_size;
 }

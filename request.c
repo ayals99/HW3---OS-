@@ -4,6 +4,29 @@
 
 #include "segel.h"
 #include "request.h"
+#include <stdbool.h>
+
+#define SKIP_SUFFIX ".skip"
+
+// Also remove the suffix from the filename
+bool suffixIsDotSkip(const char* filename) {
+    const char dot = '.';
+    if (filename == NULL) {
+        return false;
+    }
+
+    char* suffix = strrchr(filename, dot);
+    if (suffix == NULL) {
+        return false;
+    }
+    if (strcmp(suffix, SKIP_SUFFIX) == 0){
+        // remove the suffix by changing the memory contents to '\0' instead of '.'
+        *suffix = '\0';
+        return true;
+    }
+    return false;
+}
+
 
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
 void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg,
@@ -196,18 +219,20 @@ void requestServeStatic(int fd, char *filename, int filesize,
 
 }
 
+
 // handle a request
 void requestHandle(int fd, struct timeval timeOfArrival,
                             struct timeval timeOfHandling,
                             requestCounterArray DynamicArray,
                             requestCounterArray StaticArray,
                             requestCounterArray OverallArray,
-                            int threadID){
+                            int threadID, Queue queue) {
    int is_static;
    struct stat sbuf;
    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
    char filename[MAXLINE], cgiargs[MAXLINE];
    rio_t rio;
+
 
    Rio_readinitb(&rio, fd);
    Rio_readlineb(&rio, buf, MAXLINE);
@@ -238,6 +263,22 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    requestReadhdrs(&rio);
 
    is_static = requestParseURI(uri, filename, cgiargs);
+
+   //TODO: implement skipping by taking latest out of the queue
+   bool skip = false;
+   struct timeval latestArrivalTime;
+   int latestFD;
+   if (suffixIsDotSkip(filename)) { // if the suffix is .skip this function will remove the suffix
+       skip = true;
+
+       latestArrivalTime = getTailsArrivalTime(queue);
+       latestFD = dequeueLatest(queue);
+       if (latestFD == EMPTY_QUEUE) {
+           // Q@459 in piazza says that if the queue is empty then disregard the skip
+           skip = false;
+       }
+   }
+
    if (stat(filename, &sbuf) < 0) {
        requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file",
                     timeOfArrival, dispatch,
@@ -273,6 +314,15 @@ void requestHandle(int fd, struct timeval timeOfArrival,
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
                           dynamicRequestsHandled, staticRequestsHandled,
                           overallRequestsHandled, threadID);
+   }
+
+   // we now hanlde the skip:
+   if (skip){
+       struct timeval timeOfHandlingSkip;
+       gettimeofday(&timeOfHandlingSkip, NULL);
+
+       requestHandle(latestFD, latestArrivalTime, timeOfHandling,
+                     DynamicArray, StaticArray, OverallArray, threadID, queue);
    }
 }
 

@@ -23,6 +23,8 @@ int dequeue(Queue queue);
 int dequeueLatest(Queue queue);
 int dequeueByNumberInLine(Queue queue, int numberInLine);
 struct timeval getHeadsArrivalTime(Queue queue);
+struct timeval getTailsArrivalTime(Queue queue);
+
 int getQueueSize(Queue queue);
 bool empty(Queue queue);
 bool full(Queue queue);
