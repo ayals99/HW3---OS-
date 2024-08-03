@@ -28,7 +28,7 @@ struct queue{
 };
 
 /** Constructors and Destructors **/
-Queue queueConstructor(int max_size){
+Queue queueConstructor(){
     Queue newQueue = (Queue)malloc(sizeof(*newQueue));
     newQueue->m_head = NULL;
     newQueue->m_tail = NULL;

@@ -29,14 +29,11 @@ pthread_cond_t conditionBufferAvailable; // for the main thread to wait until a 
 // A queue that will hold the requests that are waiting to be handled:
 Queue waitingQueue = NULL;
 
-// TODO: Create three arrays that will act as counters:
 int* DynamicRequests = NULL;
 int* StaticRequests = NULL;
 int* OverallRequests = NULL;
 
 int threadsAtWorkCounter = ZERO;
-
-
 
 // server.c: A very, very simple web server
 
@@ -45,7 +42,6 @@ int threadsAtWorkCounter = ZERO;
 
 // Repeatedly handles HTTP requests sent to this port number.
 // Most of the work is done within routines written in request.c
-
 
 /**
 Format for command line:
@@ -67,9 +63,8 @@ The command line arguments to your web server are to be interpreted as follows:
         "dh", "bf" or "random".
 **/
 
-
 void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
-             int* maxQueueSize, char* scheduleAlgorithm){
+             int* maxQueueSize, char** scheduleAlgorithmPointer){
     // according to Question 434 in piazza, we can assume that all arguments are valid
     if (argc < NUMBER_OF_SERVER_ARGUMENTS) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
@@ -78,7 +73,7 @@ void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
     *port = atoi(argv[1]);
     *numberOfThreads = atoi(argv[2]);
     *maxQueueSize = atoi(argv[3]);
-    scheduleAlgorithm = argv[4];
+    *scheduleAlgorithmPointer = argv[4];
 }
 
 //      Function that will create the threads.
@@ -102,30 +97,67 @@ pthread_t* createThreads(int numberOfThreads){
         }
         *threadID = i;
         pthread_create(&threadsArray[i], NULL, threadRequestHandler, (void*)threadID);
+
+        // error check for pthread_create:
+        if (threadsArray[i] < 0) {
+            perror("Error: pthread_create failed\n");
+            exit(1);
+        }
     }
     return threadsArray;
 }
 
+void* threadRequestHandler(void* threadID){
+    // we receive the threadID as a void pointer, so we need to cast it to an int pointer:
+    int* threadIDPointer = (int*)threadID;
+    int threadIDValue = *threadIDPointer;
 
+    while (1){
+        // Lock the mutex in order to check if there are requests in the queue:
+        pthread_mutex_lock(&lock);
 
-// From the homework instructions:
-// block : your code for the listening (main) thread should block (not busy wait!) until a
-//          buffer becomes available and then handle the request.
-// drop_tail : your code should drop the new request immediately by closing the socket
-//              and continue listening for new requests.
-// drop_head : your code should drop the oldest request in the queue that is not
-//            currently being processed by a thread and add the new request to the end of the
-//            queue.
-// block_flush : your code for the listening (main) thread should block (not busy wait!)
-//               until the queue is empty and none of the threads handles a request and then drop
-//               the request.
-// Bonus - drop_random : when the queue is full and a new request arrives, drop
-//                      50% of the requests in the queue (that are not handled
-//                      by a thread) randomly.
-//                      You can use the rand() function to choose which to drop.
-//                      An example of this function is in output.c.
-//                      Once old requests have been dropped,
-//                      you can add the new request to the queue.
+        // If the queue is empty, wait until there is a request in the queue:
+        while (empty(waitingQueue)){
+            pthread_cond_wait(&conditionQueueNotEmpty, &lock);
+        }
+
+        // Dequeue the request from the queue:
+        struct timeval timeOfArrival = getHeadsArrivalTime(waitingQueue);
+        int connfd = dequeue(waitingQueue);
+
+        // Increment the number of threads that are currently working:
+        threadsAtWorkCounter++;
+
+        // Unlock the mutex:
+        pthread_mutex_unlock(&lock);
+
+        // Record the time of handling before handling the request:
+        struct timeval timeOfHandling;
+        gettimeofday(&timeOfHandling, NULL);
+
+        // Handle the request:
+        requestHandle(connfd, timeOfArrival, timeOfHandling,
+                      DynamicRequests, StaticRequests, OverallRequests, threadIDValue, waitingQueue);
+        Close(connfd);
+
+        // Lock the mutex in order to update the number of requests handled by the thread:
+        pthread_mutex_lock(&lock);
+
+        threadsAtWorkCounter--;
+
+        // If the queue is empty and all threads are idle, signal the main thread:
+        if (empty(waitingQueue) && threadsAtWorkCounter == ZERO){
+            pthread_cond_signal(&conditionBlockFlush);
+        }
+
+        // signal the main thread that a buffer is available, in case it's waiting on "block" algorithm:
+        pthread_cond_signal(&conditionBufferAvailable);
+
+        // Unlock the mutex:
+        pthread_mutex_unlock(&lock);
+    }
+    return NULL;
+}
 
 /** return values:
  * // false if the new request was dropped
@@ -154,9 +186,6 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
         *addedRequestToQueue = true; // "main" will add the new request to the queue
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
-        // TODO: need to make sure that the request handler knows to signal the main thread
-        //  when the queue is empty and they were the last thread working
-        // wait for the queue to be empty and none of the threads handles a request
         pthread_cond_wait(&conditionBlockFlush, &lock);
 
         // and then drop the request:
@@ -200,7 +229,9 @@ int main(int argc, char *argv[])
     int number_of_working_threads = ZERO;
 
     getargs(&port, argc, argv, &numberOfThreads,
-            &maxRequestsAllowed, scheduleAlgorithm);
+            &maxRequestsAllowed, &scheduleAlgorithm);
+
+    waitingQueue = queueConstructor();
 
     // Initialize the lock and the condition variables:
     pthread_mutex_init(&lock, NULL);
@@ -227,14 +258,8 @@ int main(int argc, char *argv[])
     DynamicRequests = malloc(sizeof(*DynamicRequests) * numberOfThreads);
     StaticRequests = malloc(sizeof(*StaticRequests) * numberOfThreads);
     OverallRequests = malloc(sizeof(*OverallRequests) * numberOfThreads);
-
-//    // if malloc failed:
-//    if (DynamicRequests == NULL || StaticRequests == NULL || OverallRequests == NULL) {
-//        perror("Error: malloc for request counter array failed\n");
-//        exit(1);
-//    }
  
-    // TODO: Initialize all three arrays to 0.
+    //  Initialize all three arrays to 0.
     for (int i = 0; i < numberOfThreads; i++){
         DynamicRequests[i] = ZERO;
         StaticRequests[i] = ZERO;
@@ -278,4 +303,20 @@ int main(int argc, char *argv[])
         // unlock the mutex:
         pthread_mutex_unlock(&lock);
     }
+
+    // Free the memory that was allocated for the arrays:
+    free(DynamicRequests);
+    free(StaticRequests);
+    free(OverallRequests);
+
+    // Destroy the mutex and the condition variables:
+    pthread_mutex_destroy(&lock);
+    pthread_cond_destroy(&conditionQueueNotEmpty);
+    pthread_cond_destroy(&conditionBlockFlush);
+    pthread_cond_destroy(&conditionBufferAvailable);
+
+    // Free the memory that was allocated for the thread pool:
+    free(threadPool);
+
+    return 0;
 }

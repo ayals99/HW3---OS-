@@ -14,7 +14,7 @@ typedef struct node* Node;
 typedef struct queue* Queue;
 
 /** Constructors and Destructors **/
-Queue queueConstructor(int max_size);
+Queue queueConstructor();
 void queueDestructor(Queue queue);
 
 /** Queue implementation **/
