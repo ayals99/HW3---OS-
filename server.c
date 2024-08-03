@@ -1,6 +1,5 @@
 #include "segel.h"
 #include "request.h"
-#include "Queue.h"
 #include <pthread.h>
 
 #define NUMBER_OF_SERVER_ARGUMENTS 5
@@ -224,9 +223,6 @@ int main(int argc, char *argv[])
     struct sockaddr_in clientaddr;
     int numberOfThreads, maxRequestsAllowed;
     char* scheduleAlgorithm = NULL;
-
-    // A counter for the amount of threads that area working at each given time:
-    int number_of_working_threads = ZERO;
 
     getargs(&port, argc, argv, &numberOfThreads,
             &maxRequestsAllowed, &scheduleAlgorithm);

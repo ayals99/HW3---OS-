@@ -1,6 +1,5 @@
 #include "Queue.h"
 
-
 /** NODE */
 struct node{
     int m_fd;
@@ -52,9 +51,6 @@ void queueDestructor(Queue queue){
 
 // adds a new node to the end of the queue
 void enqueue(Queue queue, int fd, struct timeval time_of_arrival){
-    if (full(queue)){
-        return;
-    }
     Node newNode = createNode(fd, time_of_arrival);
     if (empty(queue)){
         // both head and tail should point to the new node:

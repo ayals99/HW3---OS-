@@ -1,7 +1,7 @@
 #ifndef WEBSERVER_FILES_QUEUE_H
 #define WEBSERVER_FILES_QUEUE_H
+
 #include "segel.h"
-#include "request.h"
 #include <stdbool.h>
 
 #define INITIAL_QUEUE_SIZE 0
@@ -27,6 +27,5 @@ struct timeval getTailsArrivalTime(Queue queue);
 
 int getQueueSize(Queue queue);
 bool empty(Queue queue);
-bool full(Queue queue);
 
 #endif //WEBSERVER_FILES_QUEUE_H
