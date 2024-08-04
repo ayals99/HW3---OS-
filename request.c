@@ -44,8 +44,9 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 
    // Write out the header information for this response
    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
+   sprintf(buf, "Content-Type: text/html\r\n");
+
+   sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
 
    sprintf(buf, "%sStat-Req-Arrival:: %lu.%06lu\r\n", buf, arrivalTime.tv_sec, arrivalTime.tv_usec);
 
@@ -58,14 +59,6 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
 
    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
-
-   sprintf(buf, "Content-Type: text/html\r\n");
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
-
-   sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
 
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
@@ -200,6 +193,8 @@ void requestServeStatic(int fd, char *filename, int filesize,
    sprintf(buf, "HTTP/1.0 200 OK\r\n");
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
 
+   sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
+   sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
 
    sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, dispatch.tv_sec, dispatch.tv_usec);
 
@@ -211,9 +206,7 @@ void requestServeStatic(int fd, char *filename, int filesize,
 
    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
 
-   sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
 
-   sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
 
    Rio_writen(fd, buf, strlen(buf));
 
