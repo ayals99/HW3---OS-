@@ -120,12 +120,12 @@ void* threadRequestHandler(void* threadID){
             pthread_cond_wait(&conditionQueueNotEmpty, &lock);
         }
 
+        // Increment the number of threads that are currently working:
+        threadsAtWorkCounter++;
+
         // Dequeue the request from the queue:
         struct timeval timeOfArrival = getHeadsArrivalTime(waitingQueue);
         int connfd = dequeue(waitingQueue);
-
-        // Increment the number of threads that are currently working:
-        threadsAtWorkCounter++;
 
         // Unlock the mutex:
         pthread_mutex_unlock(&lock);
@@ -169,11 +169,11 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
             // block until a buffer becomes available
             pthread_cond_wait(&conditionBufferAvailable, &lock);
         }
-        *addedRequestToQueue = true; // "main" will add the new request to the queue
     }
     else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
         // drop_tail: drop new request by closing the socket and continue listening for new requests
         Close(connfd);
+        *addedRequestToQueue = false;
         return false; // new request will NOT be added to the queue
     }
     else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){ // drop_head
@@ -181,15 +181,19 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
                 // drop the oldest request in the queue that is not currently being processed by a thread:
                 int headFD = dequeue(waitingQueue);
                 Close(headFD);
+                *addedRequestToQueue = false;
         }
-        *addedRequestToQueue = true; // "main" will add the new request to the queue
+        // since we're not changing the amount of requests in the Queue, a signal was already sent to wake up a thread
+        // when the head was added, and therefore we don't need to send another signal.
+        return true;
     }
     else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
-        pthread_cond_wait(&conditionBlockFlush, &lock);
 
+        pthread_cond_wait(&conditionBlockFlush, &lock);
         // and then drop the request:
         Close(connfd);
 
+        *addedRequestToQueue = false;
         return false; // new request will NOT be added to the queue
     }
     else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL) // drop_random
@@ -201,6 +205,10 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
 
         // drop the requests, in a for loop:
         for (int i = 0; i < numberOfRequestsToDrop; i++){
+            if (empty(waitingQueue)){
+                break;
+            }
+
             // generate a random number between 0 and the size of the queue - 1
             // notice that rand() return a number between 0 and RAND_MAX, so
             // we need to use the modulo operator to get a number between 0 and
@@ -212,7 +220,7 @@ bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQue
             int toClose = dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
             Close(toClose);
         }
-        *addedRequestToQueue = true;
+        return true;
     }
     return true;
 }
@@ -277,7 +285,7 @@ int main(int argc, char *argv[])
 
         // If all threads are busy and the queue is full, we need to handle the overload:
         bool needToEnqueue = true; 
-        bool addedRequestToQueue = false;
+        bool addedRequestToQueue = true;
         if (threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
             // save the status that is returned from handleOverload in case of drop_tail
             // (because then we don't need to enqueue the request)
@@ -299,20 +307,6 @@ int main(int argc, char *argv[])
         // unlock the mutex:
         pthread_mutex_unlock(&lock);
     }
-
-    // Free the memory that was allocated for the arrays:
-    free(DynamicRequests);
-    free(StaticRequests);
-    free(OverallRequests);
-
-    // Destroy the mutex and the condition variables:
-    pthread_mutex_destroy(&lock);
-    pthread_cond_destroy(&conditionQueueNotEmpty);
-    pthread_cond_destroy(&conditionBlockFlush);
-    pthread_cond_destroy(&conditionBufferAvailable);
-
-    // Free the memory that was allocated for the thread pool:
-    free(threadPool);
 
     return 0;
 }
