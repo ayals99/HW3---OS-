@@ -10,6 +10,6 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                    requestCounterArray DynamicArray,
                    requestCounterArray StaticArray,
                    requestCounterArray OverallArray,
-                   int threadID, Queue queue);
+                   int threadID, Queue queue, int* activeThreads);
 
 #endif

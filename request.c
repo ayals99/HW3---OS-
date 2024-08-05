@@ -8,6 +8,11 @@
 
 #define SKIP_SUFFIX ".skip"
 
+extern pthread_mutex_t lock;
+extern pthread_cond_t conditionQueueNotEmpty;
+extern pthread_cond_t conditionBlockFlush;
+extern pthread_cond_t conditionBufferAvailable;
+
 // Also remove the suffix from the filename
 bool suffixIsDotSkip(const char* filename) {
     const char dot = '.';
@@ -31,8 +36,7 @@ bool suffixIsDotSkip(const char* filename) {
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
 void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg,
                             struct timeval arrivalTime, struct timeval dispatch,
-                            int dynamicRequestsHandled, int staticRequestsHandled,
-                            int overallRequestsHandled, int threadID) {
+                            int* StaticArray, int* DynamicArray, int* OverallArray, int threadID) {
    char buf[MAXLINE], body[MAXBUF];
 
    // Create the body of the error message
@@ -42,11 +46,16 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
    sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
    sprintf(body, "%s<hr>OS-HW3 Web Server\r\n", body);
 
-   // Write out the header information for this response
+   //Write out the header information for this response
    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-   sprintf(buf, "Content-Type: text/html\r\n");
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
 
-   sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
+   sprintf(buf, "Content-Type: text/html\r\n");
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
+
+   sprintf(buf, "Content-Length: %lu\r\n", strlen(body));
 
    sprintf(buf, "%sStat-Req-Arrival:: %lu.%06lu\r\n", buf, arrivalTime.tv_sec, arrivalTime.tv_usec);
 
@@ -54,16 +63,15 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 
    sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallArray[threadID]);
 
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticArray[threadID]);
 
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
-
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, DynamicArray[threadID]);
 
    // Write out the content
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
    Rio_writen(fd, body, strlen(body));
    printf("%s", body);
 }
@@ -135,12 +143,12 @@ void requestGetFiletype(char *filename, char *filetype)
 
 void requestServeDynamic(int fd, char *filename, char *cgiargs,
                          struct timeval arrivalTime, struct timeval dispatch,
-                         int dynamicRequestsHandled, int staticRequestsHandled,
-                         int overallRequestsHandled, int threadID)
+                         int* DynamicArray, int* StaticArray, int* OverallArray, int threadID)
 {
    char buf[MAXLINE], *emptylist[] = {NULL};
+
    // The server does only a little bit of the header.
-//    The CGI script has to finish writing out the header.
+   // The CGI script has to finish writing out the header.
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
     sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
 
@@ -150,16 +158,14 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs,
 
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-    sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
+    sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallArray[threadID]);
 
-    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
+    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticArray[threadID]);
 
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, DynamicArray[threadID]);
 
     Rio_writen(fd, buf, strlen(buf));
-
     int pid = 0;
-
     if ((pid = Fork()) == 0) {
       /* Child process */
       Setenv("QUERY_STRING", cgiargs, 1);
@@ -173,9 +179,7 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs,
 
 void requestServeStatic(int fd, char *filename, int filesize,
                         struct timeval arrival, struct timeval dispatch,
-                        int dynamicRequestsHandled,
-                        int staticRequestsHandled,
-                        int overallRequestsHandled, int threadID)
+                        int* DynamicArray, int* StaticArray,  int* OverallArray, int threadID)
 {
    int srcfd;
    char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -192,21 +196,19 @@ void requestServeStatic(int fd, char *filename, int filesize,
    // put together response
    sprintf(buf, "HTTP/1.0 200 OK\r\n");
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
-
    sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
-   sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
+   sprintf(buf, "%sContent-Type: %s\r\n", buf, filetype);
+   sprintf(buf, "%sStat-Req-Arrival:: %lu.%06lu\r\n", buf, arrival.tv_sec, arrival.tv_usec);
 
    sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, dispatch.tv_sec, dispatch.tv_usec);
 
    sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, threadID);
 
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, overallRequestsHandled);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, OverallArray[threadID]);
 
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, staticRequestsHandled);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, StaticArray[threadID]);
 
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, dynamicRequestsHandled);
-
-
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, DynamicArray[threadID]);
 
    Rio_writen(fd, buf, strlen(buf));
 
@@ -223,14 +225,14 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                             requestCounterArray DynamicArray,
                             requestCounterArray StaticArray,
                             requestCounterArray OverallArray,
-                            int threadID, Queue queue) {
+                            int threadID, Queue queue, int* activeThreadCount) {
    int is_static;
    struct stat sbuf;
    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
    char filename[MAXLINE], cgiargs[MAXLINE];
    rio_t rio;
 
-
+   printf("%d\n", fd);
    Rio_readinitb(&rio, fd);
    Rio_readlineb(&rio, buf, MAXLINE);
    sscanf(buf, "%s %s %s", method, uri, version);
@@ -244,16 +246,14 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    struct timeval dispatch;
    timersub(&timeOfHandling, &timeOfArrival, &dispatch);
 
-   int staticRequestsHandled = StaticArray[threadID];
-   int dynamicRequestsHandled = DynamicArray[threadID];
-   int overallRequestsHandled = OverallArray[threadID];
+
 
    if (strcasecmp(method, "GET")) {
        requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method",
                     timeOfArrival, dispatch,
-                    dynamicRequestsHandled,
-                    staticRequestsHandled,
-                    overallRequestsHandled, threadID);
+                    StaticArray,
+                    DynamicArray,
+                    OverallArray, threadID);
        return;
    }
 
@@ -268,20 +268,26 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    if (suffixIsDotSkip(filename)) { // if the suffix is .skip this function will remove the suffix
        skip = true;
 
+       pthread_mutex_lock(&lock);
+
        latestArrivalTime = getTailsArrivalTime(queue);
        latestFD = dequeueLatest(queue);
        if (latestFD == EMPTY_QUEUE) {
            // Q@459 in piazza says that if the queue is empty then disregard the skip
            skip = false;
        }
+       else{
+           // the skipped request needs to be counted as part of the queue
+           // and since we dequeue it, we need to increment the active thread count to compensate:
+           (*activeThreadCount)++;
+       }
+       pthread_mutex_unlock(&lock);
    }
 
    if (stat(filename, &sbuf) < 0) {
        requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file",
                     timeOfArrival, dispatch,
-                    dynamicRequestsHandled,
-                    staticRequestsHandled,
-                    overallRequestsHandled, threadID);
+                    DynamicArray, StaticArray, OverallArray, threadID);
        return;
    }
 
@@ -289,38 +295,40 @@ void requestHandle(int fd, struct timeval timeOfArrival,
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file",
                       timeOfArrival, dispatch,
-                      dynamicRequestsHandled,
-                      staticRequestsHandled,
-                      overallRequestsHandled, threadID);
+                      DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
       StaticArray[fd]++;
       requestServeStatic(fd, filename, sbuf.st_size, timeOfArrival, dispatch,
-                         dynamicRequestsHandled, staticRequestsHandled,
-                         overallRequestsHandled, threadID);
+                         DynamicArray, StaticArray, OverallArray, threadID);
    }
    else {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program",
                       timeOfArrival, dispatch,
-                      dynamicRequestsHandled, staticRequestsHandled,
-                      overallRequestsHandled, threadID);
+                      DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
       DynamicArray[fd]++;
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
-                          dynamicRequestsHandled, staticRequestsHandled,
-                          overallRequestsHandled, threadID);
+                          DynamicArray, StaticArray, OverallArray, threadID);
    }
 
-   // we now hanlde the skip:
+   // we now handle the skip:
    if (skip){
        struct timeval timeOfHandlingSkip;
        gettimeofday(&timeOfHandlingSkip, NULL);
 
        requestHandle(latestFD, latestArrivalTime, timeOfHandling,
-                     DynamicArray, StaticArray, OverallArray, threadID, queue);
+                     DynamicArray, StaticArray, OverallArray, threadID,
+                     queue, activeThreadCount);
+       Close(latestFD);
+
+       // the request has been handled,
+       // decrement the active thread count to balance back the total number of requests in the queue
+       (*activeThreadCount)--;
+
+       // signal that the buffer is available
+       pthread_cond_signal(&conditionBufferAvailable);
    }
 }
-
-

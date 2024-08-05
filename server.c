@@ -134,9 +134,11 @@ void* threadRequestHandler(void* threadID){
         struct timeval timeOfHandling;
         gettimeofday(&timeOfHandling, NULL);
 
+        // TODO: check if need to lock the mutex before calling requestHandle
         // Handle the request:
         requestHandle(connfd, timeOfArrival, timeOfHandling,
-                      DynamicRequests, StaticRequests, OverallRequests, threadIDValue, waitingQueue);
+                      DynamicRequests, StaticRequests, OverallRequests,
+                      threadIDValue, waitingQueue, &threadsAtWorkCounter);
         Close(connfd);
 
         // Lock the mutex in order to update the number of requests handled by the thread:
