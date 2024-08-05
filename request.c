@@ -227,17 +227,17 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                             requestCounterArray OverallArray,
                             int threadID, Queue queue, int* activeThreadCount) {
     /** Increment the total number of requests: */
-    OverallArray[threadID]++;
+    OverallArray[threadID] += 1;
 
     /** calculate dispatch time: */
     struct timeval dispatch;
     timersub(&timeOfHandling, &timeOfArrival, &dispatch);
 
     int is_static;
-   struct stat sbuf;
-   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-   char filename[MAXLINE], cgiargs[MAXLINE];
-   rio_t rio;
+    struct stat sbuf;
+    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+    char filename[MAXLINE], cgiargs[MAXLINE];
+    rio_t rio;
 
    printf("%d\n", fd);
    Rio_readinitb(&rio, fd);
@@ -250,9 +250,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    if (strcasecmp(method, "GET")) {
        requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method",
                     timeOfArrival, dispatch,
-                    StaticArray,
-                    DynamicArray,
-                    OverallArray, threadID);
+                    StaticArray, DynamicArray, OverallArray, threadID);
        return;
    }
 
@@ -260,7 +258,6 @@ void requestHandle(int fd, struct timeval timeOfArrival,
 
    is_static = requestParseURI(uri, filename, cgiargs);
 
-   //TODO: implement skipping by taking latest out of the queue
    bool skip = false;
    struct timeval latestArrivalTime;
    int latestFD;
@@ -297,7 +294,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                       DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
-      StaticArray[threadID]++;
+      StaticArray[threadID] += 1;
       requestServeStatic(fd, filename, sbuf.st_size, timeOfArrival, dispatch,
                          DynamicArray, StaticArray, OverallArray, threadID);
    }
@@ -308,7 +305,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                       DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
-      DynamicArray[threadID]++;
+       DynamicArray[threadID] += 1;
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
                           DynamicArray, StaticArray, OverallArray, threadID);
    }

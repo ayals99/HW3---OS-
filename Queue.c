@@ -135,6 +135,9 @@ int dequeueByNumberInLine(Queue queue, int numberInLine){
         if(current->m_next != NULL){
             current->m_next->m_previous = previous;
         }
+        if(current == queue->m_tail){
+            queue->m_tail = previous;
+        }
     }
 
     int fd = current->m_fd;

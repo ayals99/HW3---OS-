@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
-    //printf("fdsfsdf");
+
     // we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
 
     /** Explanation:
@@ -222,14 +222,16 @@ int main(int argc, char *argv[])
                 break;
             }
             else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){ // drop_head
-                if (!empty(waitingQueue)){
-                    // drop the oldest request in the queue that is not currently being processed by a thread:
-                    int headFD = dequeue(waitingQueue);
-                    Close(headFD);
+                if (empty(waitingQueue)){
+                    Close(connfd);
                     addedRequestToQueue = false;
+                    needToEnqueue = false; // new request will NOT be added to the queue
+                    break;
                 }
-                break;
-
+                // drop the oldest request in the queue that is not currently being processed by a thread:
+                int headFD = dequeue(waitingQueue);
+                Close(headFD);
+                addedRequestToQueue = false;
             }
             else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
                 pthread_cond_wait(&conditionBlockFlush, &lock);
@@ -242,6 +244,9 @@ int main(int argc, char *argv[])
             }
             else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL) // drop_random
                 if (empty(waitingQueue)){
+                    needToEnqueue = false; // new request will NOT be added to the queue
+                    addedRequestToQueue = false;
+                    Close(connfd);
                     break;
                 }
 
@@ -268,6 +273,7 @@ int main(int argc, char *argv[])
                     Close(toClose);
                 }
                 needToEnqueue = true;
+                addedRequestToQueue = true;
                 break;
             }
         }
