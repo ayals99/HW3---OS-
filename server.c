@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
     pthread_cond_init(&conditionBlockFlush, NULL);
     pthread_cond_init(&conditionBufferAvailable, NULL);
 
-    pthread_t threadPool[numberOfThreads];
+    pthread_t* threadPool = malloc(sizeof(pthread_t)*numberOfThreads);
 
     for(int i = 0; i < numberOfThreads; i++){
         int* threadID = malloc(sizeof(int));
@@ -161,12 +161,12 @@ int main(int argc, char *argv[])
         pthread_create(&threadPool[i], NULL, threadRequestHandler, (void*)threadID);
 
         // error check for pthread_create:
-        if (threadPool[i] != 0) { // 0 is success
+        if (threadPool[i] < 0) { // 0 is success
             perror("Error: pthread_create failed\n");
             exit(1);
         }
     }
-
+    //printf("fdsfsdf");
     // we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
 
     /** Explanation:
@@ -228,6 +228,8 @@ int main(int argc, char *argv[])
                     Close(headFD);
                     addedRequestToQueue = false;
                 }
+                break;
+
             }
             else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
                 pthread_cond_wait(&conditionBlockFlush, &lock);
