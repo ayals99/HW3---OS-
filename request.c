@@ -226,7 +226,14 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                             requestCounterArray StaticArray,
                             requestCounterArray OverallArray,
                             int threadID, Queue queue, int* activeThreadCount) {
-   int is_static;
+    /** Increment the total number of requests: */
+    OverallArray[threadID]++;
+
+    /** calculate dispatch time: */
+    struct timeval dispatch;
+    timersub(&timeOfHandling, &timeOfArrival, &dispatch);
+
+    int is_static;
    struct stat sbuf;
    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
    char filename[MAXLINE], cgiargs[MAXLINE];
@@ -238,14 +245,6 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    sscanf(buf, "%s %s %s", method, uri, version);
 
    printf("%s %s %s\n", method, uri, version);
-
-   /** Increment the total number of requests: */
-   OverallArray[fd]++;
-
-   /** calculate dispatch time: */
-   struct timeval dispatch;
-   timersub(&timeOfHandling, &timeOfArrival, &dispatch);
-
 
 
    if (strcasecmp(method, "GET")) {
@@ -298,7 +297,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                       DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
-      StaticArray[fd]++;
+      StaticArray[threadID]++;
       requestServeStatic(fd, filename, sbuf.st_size, timeOfArrival, dispatch,
                          DynamicArray, StaticArray, OverallArray, threadID);
    }
@@ -309,7 +308,7 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                       DynamicArray, StaticArray, OverallArray, threadID);
          return;
       }
-      DynamicArray[fd]++;
+      DynamicArray[threadID]++;
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
                           DynamicArray, StaticArray, OverallArray, threadID);
    }

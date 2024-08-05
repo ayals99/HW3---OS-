@@ -15,8 +15,6 @@
 
 void* threadRequestHandler(void* threadID);
 
-bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int threadTotalAmount);
-
 /** Mutex and condition variables: */
 pthread_mutex_t lock;
 
@@ -75,37 +73,6 @@ void getargs(int* port, int argc, char *argv[],int* numberOfThreads,
     *scheduleAlgorithmPointer = argv[4];
 }
 
-//      Function that will create the threads.
-//      The threads should be created in a for loop.
-//      The number of threads created should be equal to the number of threads
-//      specified in the command line arguments.
-pthread_t* createThreads(int numberOfThreads){
-    pthread_t* threadsArray = malloc(sizeof(pthread_t) * numberOfThreads);
-    // if malloc failed:
-    if (threadsArray == NULL) {
-        perror("Error: malloc for threadsArray failed\n");
-        exit(1);
-    }
-    for(int i = 0; i < numberOfThreads; i++){
-        // TODO: add function instead of threadRequestHandler
-        int* threadID = malloc(sizeof(int));
-        // if malloc for threadID failed:
-        if (threadID == NULL) {
-            perror("Error: malloc for threadID failed\n");
-            exit(1);
-        }
-        *threadID = i;
-        pthread_create(&threadsArray[i], NULL, threadRequestHandler, (void*)threadID);
-
-        // error check for pthread_create:
-        if (threadsArray[i] < 0) {
-            perror("Error: pthread_create failed\n");
-            exit(1);
-        }
-    }
-    return threadsArray;
-}
-
 void* threadRequestHandler(void* threadID){
     // we receive the threadID as a void pointer, so we need to cast it to an int pointer:
     int* threadIDPointer = (int*)threadID;
@@ -127,12 +94,13 @@ void* threadRequestHandler(void* threadID){
         struct timeval timeOfArrival = getHeadsArrivalTime(waitingQueue);
         int connfd = dequeue(waitingQueue);
 
-        // Unlock the mutex:
-        pthread_mutex_unlock(&lock);
-
         // Record the time of handling before handling the request:
         struct timeval timeOfHandling;
         gettimeofday(&timeOfHandling, NULL);
+
+        // Unlock the mutex:
+        pthread_mutex_unlock(&lock);
+
 
         // TODO: check if need to lock the mutex before calling requestHandle
         // Handle the request:
@@ -160,73 +128,6 @@ void* threadRequestHandler(void* threadID){
     return NULL;
 }
 
-/** return values:
- * // false if the new request was dropped
- * // true (by default) if the new request needs to be enqueued */
-bool handleOverload(char* scheduleAlgorithm, int connfd, bool* addedRequestToQueue, int maxRequestsAllowed){
-    if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
-        // TODO: need to make sure that the request handler knows to signal the main thread
-        //  if the buffer is now available (i.e. they finished working on a request):
-        while(threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
-            // block until a buffer becomes available
-            pthread_cond_wait(&conditionBufferAvailable, &lock);
-        }
-    }
-    else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
-        // drop_tail: drop new request by closing the socket and continue listening for new requests
-        Close(connfd);
-        *addedRequestToQueue = false;
-        return false; // new request will NOT be added to the queue
-    }
-    else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){ // drop_head
-        if (!empty(waitingQueue)){
-                // drop the oldest request in the queue that is not currently being processed by a thread:
-                int headFD = dequeue(waitingQueue);
-                Close(headFD);
-                *addedRequestToQueue = false;
-        }
-        // since we're not changing the amount of requests in the Queue, a signal was already sent to wake up a thread
-        // when the head was added, and therefore we don't need to send another signal.
-        return true;
-    }
-    else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
-
-        pthread_cond_wait(&conditionBlockFlush, &lock);
-        // and then drop the request:
-        Close(connfd);
-
-        *addedRequestToQueue = false;
-        return false; // new request will NOT be added to the queue
-    }
-    else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL) // drop_random
-
-        // Calculate 50% of the requests in the queue:
-        // Question 409 in piazza says to round upwards,
-        // so we will add 1 to the division before dividing by 2.
-        int numberOfRequestsToDrop = (getQueueSize(waitingQueue ) + 1) / 2;
-
-        // drop the requests, in a for loop:
-        for (int i = 0; i < numberOfRequestsToDrop; i++){
-            if (empty(waitingQueue)){
-                break;
-            }
-
-            // generate a random number between 0 and the size of the queue - 1
-            // notice that rand() return a number between 0 and RAND_MAX, so
-            // we need to use the modulo operator to get a number between 0 and
-            // the size of the queue - 1
-            int randomIndexInQueue = rand() % getQueueSize(waitingQueue);
-
-            // drop the request in index randomNumberInRange
-            // by de-queueing it from the waiting queue
-            int toClose = dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
-            Close(toClose);
-        }
-        return true;
-    }
-    return true;
-}
-
 int main(int argc, char *argv[])
 {
     int listenfd, connfd, port, clientlen;
@@ -245,13 +146,28 @@ int main(int argc, char *argv[])
     pthread_cond_init(&conditionBlockFlush, NULL);
     pthread_cond_init(&conditionBufferAvailable, NULL);
 
+    pthread_t threadPool[numberOfThreads];
 
-    pthread_t* threadPool = createThreads(numberOfThreads);
+    for(int i = 0; i < numberOfThreads; i++){
+        int* threadID = malloc(sizeof(int));
 
-    // TODO: make sure that all threads are blocked when created
-    //  so they won't start working before a request comes in.
-    //  might want to create a function that will block the threads.
-    //  we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
+        // if malloc for threadID failed:
+        if (threadID == NULL) {
+            perror("Error: malloc for threadID failed\n");
+            exit(1);
+        }
+
+        *threadID = i;
+        pthread_create(&threadPool[i], NULL, threadRequestHandler, (void*)threadID);
+
+        // error check for pthread_create:
+        if (threadPool[i] != 0) { // 0 is success
+            perror("Error: pthread_create failed\n");
+            exit(1);
+        }
+    }
+
+    // we can tell the amount of threads that need to be blocked by: number of threads - number of requests.
 
     /** Explanation:
     // Three arrays that will act as counters.
@@ -288,10 +204,70 @@ int main(int argc, char *argv[])
         // If all threads are busy and the queue is full, we need to handle the overload:
         bool needToEnqueue = true; 
         bool addedRequestToQueue = true;
-        if (threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
+
+        while (threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
             // save the status that is returned from handleOverload in case of drop_tail
             // (because then we don't need to enqueue the request)
-            needToEnqueue = handleOverload(scheduleAlgorithm, connfd, &addedRequestToQueue, maxRequestsAllowed);
+            if (strcmp(scheduleAlgorithm, BLOCK_ALGORITHM) == IDENTICAL){
+                while(threadsAtWorkCounter + getQueueSize(waitingQueue) == maxRequestsAllowed){
+                    // block until a buffer becomes available
+                    pthread_cond_wait(&conditionBufferAvailable, &lock);
+                }
+            }
+            else if (strcmp(scheduleAlgorithm, DROP_TAIL_ALGORITHM) == IDENTICAL){
+                // drop_tail: drop new request by closing the socket and continue listening for new requests
+                Close(connfd);
+                addedRequestToQueue = false;
+                needToEnqueue = false; // new request will NOT be added to the queue
+                break;
+            }
+            else if (strcmp(scheduleAlgorithm, DROP_HEAD_ALGORITHM) == IDENTICAL){ // drop_head
+                if (!empty(waitingQueue)){
+                    // drop the oldest request in the queue that is not currently being processed by a thread:
+                    int headFD = dequeue(waitingQueue);
+                    Close(headFD);
+                    addedRequestToQueue = false;
+                }
+            }
+            else if (strcmp(scheduleAlgorithm, BLOCK_FLUSH_ALGORITHM) == IDENTICAL){ // block_flush
+                pthread_cond_wait(&conditionBlockFlush, &lock);
+                // and then drop the request:
+                Close(connfd);
+
+                addedRequestToQueue = false;
+                needToEnqueue = false; // new request will NOT be added to the queue
+                break;
+            }
+            else { // (strcmp(scheduleAlgorithm, DROP_RANDOM_ALGORITHM) == IDENTICAL) // drop_random
+                if (empty(waitingQueue)){
+                    break;
+                }
+
+                // Calculate 50% of the requests in the queue:
+                // Question 409 in piazza says to round upwards,
+                // so we will add 1 to the division before dividing by 2.
+                int numberOfRequestsToDrop = (getQueueSize(waitingQueue) + 1) / 2;
+
+                // drop the requests, in a for loop:
+                for (int i = 0; i < numberOfRequestsToDrop; i++){
+                    if (empty(waitingQueue)){
+                        break;
+                    }
+
+                    // generate a random number between 0 and the size of the queue - 1
+                    // notice that rand() return a number between 0 and RAND_MAX, so
+                    // we need to use the modulo operator to get a number between 0 and
+                    // the size of the queue - 1
+                    int randomIndexInQueue = rand() % getQueueSize(waitingQueue);
+
+                    // drop the request in index randomNumberInRange
+                    // by de-queueing it from the waiting queue
+                    int toClose = dequeueByNumberInLine(waitingQueue, randomIndexInQueue);
+                    Close(toClose);
+                }
+                needToEnqueue = true;
+                break;
+            }
         }
 
         // add the request to the queue (if we dropped the request, we don't need to enqueue):
