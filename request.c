@@ -262,9 +262,10 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    struct timeval latestArrivalTime;
    int latestFD;
    if (suffixIsDotSkip(filename)) { // if the suffix is .skip this function will remove the suffix
-       skip = true;
+
 
        pthread_mutex_lock(&lock);
+       skip = true;
 
        latestArrivalTime = getTailsArrivalTime(queue);
        latestFD = dequeueLatest(queue);
@@ -283,15 +284,15 @@ void requestHandle(int fd, struct timeval timeOfArrival,
    if (stat(filename, &sbuf) < 0) {
        requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file",
                     timeOfArrival, dispatch,
-                    DynamicArray, StaticArray, OverallArray, threadID);
+                    StaticArray, DynamicArray, OverallArray, threadID);
        return;
    }
 
    if (is_static) {
-      if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
+      if ( !(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file",
                       timeOfArrival, dispatch,
-                      DynamicArray, StaticArray, OverallArray, threadID);
+                      StaticArray, DynamicArray, OverallArray, threadID);
          return;
       }
       StaticArray[threadID] += 1;
@@ -302,10 +303,10 @@ void requestHandle(int fd, struct timeval timeOfArrival,
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
          requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program",
                       timeOfArrival, dispatch,
-                      DynamicArray, StaticArray, OverallArray, threadID);
+                      StaticArray, DynamicArray, OverallArray, threadID);
          return;
       }
-       DynamicArray[threadID] += 1;
+      DynamicArray[threadID] += 1;
       requestServeDynamic(fd, filename, cgiargs, timeOfArrival, dispatch,
                           DynamicArray, StaticArray, OverallArray, threadID);
    }
@@ -320,9 +321,11 @@ void requestHandle(int fd, struct timeval timeOfArrival,
                      queue, activeThreadCount);
        Close(latestFD);
 
+       pthread_mutex_lock(&lock);
        // the request has been handled,
        // decrement the active thread count to balance back the total number of requests in the queue
        (*activeThreadCount)--;
+       pthread_mutex_unlock(&lock);
 
        // signal that the buffer is available
        pthread_cond_signal(&conditionBufferAvailable);

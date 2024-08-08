@@ -115,7 +115,7 @@ void* threadRequestHandler(void* threadID){
         threadsAtWorkCounter--;
 
         // If the queue is empty and all threads are idle, signal the main thread:
-        if (empty(waitingQueue) && threadsAtWorkCounter == ZERO){
+        if (empty(waitingQueue) && (threadsAtWorkCounter == ZERO) ){
             pthread_cond_signal(&conditionBlockFlush);
         }
 
