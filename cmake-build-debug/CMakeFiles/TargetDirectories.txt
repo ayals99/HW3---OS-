@@ -1,3 +1,0 @@
-C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/cmake-build-debug/CMakeFiles/HW3___OS_.dir
-C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/Users/ayals/OneDrive/Documents/GitHub/HW3---OS-/cmake-build-debug/CMakeFiles/rebuild_cache.dir
